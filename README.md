@@ -1,44 +1,138 @@
 # MacCleaner
 
-Aplicativo nativo para macOS (**Swift + SwiftUI**) focado em liberar espaço em disco limpando caches de agentes de IA, IDEs, gerenciadores de pacotes, Xcode/simuladores, caches do sistema e dependências antigas de projetos parados.
+Native macOS disk cleaner engineered with **Swift 6** and **SwiftUI** — purpose-built to safely reclaim gigabytes lost to **AI coding agent caches**, **local LLM models**, **package managers**, **Xcode simulators**, and **stale project dependencies**.
 
-## Estrutura do Projeto
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000?style=flat-square&logo=apple)
+![Swift 6.0](https://img.shields.io/badge/Swift-6.0-F05138?style=flat-square&logo=swift&logoColor=white)
+![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-0A84FF?style=flat-square)
+![Swift Testing](https://img.shields.io/badge/Tests-Swift%20Testing-28CD41?style=flat-square)
 
-- `Sources/MacCleanerCore`: biblioteca principal com modelos, catálogo de regras (`RuleCatalog`), trava de segurança (`SafetyGuard`), motor de varredura paralelo (`ScannerEngine`), limpeza (`CleanerEngine`) e exclusões (`ExclusionsStore`).
-- `Sources/MacCleaner`: interface nativa em SwiftUI (`NavigationSplitView`, gráfico com `Charts`, `MenuBarExtra`, preview de dry-run) + flag de terminal `--scan-summary`.
-- `Tests/MacCleanerCoreTests`: testes unitários isolados em diretórios temporários (Swift Testing).
-- `scripts/build-app.sh`: gera o bundle `build/MacCleaner.app`.
-- `scripts/test.sh`: executa os testes unitários carregando o plugin de macros do Swift Testing no Command Line Tools.
+[![MacCleaner Demo Preview](media/maccleaner-preview.gif)](media/maccleaner-demo-en.mp4)
 
-## Como Executar
+<p align="center">
+  <a href="media/maccleaner-demo-en.mp4">▶ Watch full 1080p @ 30fps MP4 demo</a>
+</p>
 
-### 1. Gerar e abrir o `.app` standalone (`build/MacCleaner.app`)
+---
+
+## Why I Built MacCleaner
+
+When working daily with AI coding agents, local LLMs, and multiple toolchains on macOS, tens of gigabytes silently accumulate in hidden directories (`~/.npm/_cacache`, `~/.cache/huggingface`, `~/.ollama`, DerivedData, browser automation binaries, and orphaned `node_modules` / `.venv` folders) that generic cleaner utilities ignore.
+
+MacCleaner inspects all developer and AI targets in parallel, enforces strict programmatic path safety guarantees, requires an explicit **Dry-Run Confirmation** before touching a single byte, and moves items to the **macOS Trash** by default so every cleanup stays recoverable.
+
+---
+
+## Cleanup Rule Catalog (6 Categories)
+
+| Category | Targets Covered |
+| --- | --- |
+| **AI Agents & IDEs** | Antigravity caches & browser recordings/sessions, Gemini CLI temp/cache, Claude Code caches/backups/debug logs & project sessions, Codex, Cursor, VS Code, Windsurf |
+| **Local AI Models** | HuggingFace Hub cache, Ollama models, LM Studio models |
+| **Developer Package Caches** | `npm`, `pnpm`, `bun`, `yarn`, `pip`, `uv`, Homebrew, SwiftPM, Playwright, Puppeteer, Cargo, Gradle, CocoaPods |
+| **Xcode & Mobile** | `DerivedData`, Xcode caches, CoreSimulator caches & simulator devices |
+| **System & Apps** | User `~/Library/Caches`, user `~/Library/Logs`, old installer packages in `~/Downloads` |
+| **Stale Project Artifacts** | Dormant `node_modules` and Python `.venv` folders inside projects untouched past a configurable staleness window (default 30 days) |
+
+---
+
+## Safety-First Architecture
+
+- **3 Risk Tiers:** Separates 100% recreatable caches (**Safe**), re-downloadable assets (**Moderate**), and manual review items like AI conversation history or downloaded model weights (**Manual Review**).
+- **Mandatory Dry-Run Preview:** No file deletion can ever occur without first reviewing the itemized preview sheet showing every exact path, item count, and byte total.
+- **Trash by Default:** Moves items via `FileManager.trashItem` so everything can be restored from macOS Trash. Permanent deletion requires an explicit opt-in toggle with prominent confirmation warnings.
+- **Hardcoded `SafetyGuard` Rails:**
+  - Blocks system roots (`/`, `/System`, `/usr`, `/bin`, `/sbin`, `/Library`, `/Applications`, `/Users`) and critical user roots (`~`, `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Library/Keychains`, `~/.ssh`, `~/.gnupg`, `~/.aws`).
+  - Protects sensitive filenames by component (`.env`, `.env.local`, `.env.production`, `credentials`, `credentials.json`, `settings.json`, `auth.json`, `id_rsa`, `id_ed25519`, `known_hosts`, `login.keychain-db`).
+  - Validates resolved parent symlinks to block directory-traversal or symlink escapes into protected roots.
+- **Custom Whitelist (`ExclusionsStore`):** Protect any folder or path directly from the UI (shield icon or **Protected** tab).
+
+---
+
+## Project Structure
+
+```text
+├── Package.swift                               # Swift 6.0 SPM manifest (macOS 14+)
+├── Sources/
+│   ├── MacCleanerCore/                         # Core scanning & safety engine library
+│   │   ├── RuleCatalog.swift                   # Built-in 6-category developer/AI rules
+│   │   ├── SafetyGuard.swift                   # Immutable path, filename & symlink validator
+│   │   ├── ScannerEngine.swift                 # Parallel disk scanner
+│   │   ├── CleanerEngine.swift                 # Trash & permanent deletion execution engine
+│   │   ├── ExclusionsStore.swift               # User-managed whitelist persistence
+│   │   ├── Localization.swift                  # EN / PT-BR localization helper
+│   │   └── Models.swift                        # Scan summary, categories, risk tiers & reports
+│   └── MacCleaner/                             # Native SwiftUI app + MenuBarExtra
+│       ├── MacCleanerApp.swift                 # App entry point, MenuBarExtra & CLI --scan-summary
+│       ├── OverviewView.swift                  # Disk overview & Swift Charts breakdown
+│       ├── CategoryDetailView.swift            # Rule inspector & per-target selection
+│       ├── DryRunConfirmationSheet.swift       # Mandatory dry-run verification modal
+│       ├── CleanResultSheet.swift              # Post-clean summary & freed-space report
+│       ├── ExclusionsView.swift                # Whitelist manager
+│       └── DemoRecorder.swift                  # Scripted 1080p demo frame exporter
+├── Tests/
+│   └── MacCleanerCoreTests/
+│       └── MacCleanerCoreTests.swift           # Isolated Swift Testing suite in temp sandboxes
+└── scripts/
+    ├── build-app.sh                            # Builds release binary & packages MacCleaner.app
+    └── test.sh                                 # Runs unit tests with Swift Testing macros plugin
+```
+
+---
+
+## Getting Started
+
+### Requirements
+- **macOS 14 (Sonoma)** or later
+- **Swift 6.0+** (Xcode or Command Line Tools)
+
+### 1. Build & Launch the `.app` Bundle
+
 ```bash
+git clone https://github.com/leonardogtcruz1/mac-cleaner.git
+cd mac-cleaner
 ./scripts/build-app.sh
 open build/MacCleaner.app
 ```
 
-### 2. Abrir diretamente via SwiftPM
+> **Note:** Build scripts pass `--scratch-path "${TMPDIR:-/tmp}/mac-cleaner-build"` so Finder/iCloud Drive extended attributes inside `.build` never interfere with `codesign`.
+
+### 2. Run Directly via SwiftPM
+
 ```bash
 swift run --scratch-path /tmp/mac-cleaner-build MacCleaner
 ```
 
-### 3. Executar um diagnóstico rápido no terminal (somente leitura)
+### 3. Read-Only CLI Diagnostic Scan
+
 ```bash
 build/MacCleaner.app/Contents/MacOS/MacCleaner --scan-summary
 ```
 
-### 4. Rodar os testes unitários
+### 4. Run Unit Tests
+
 ```bash
 ./scripts/test.sh
 ```
 
-> **Nota sobre build no Desktop / iCloud Drive**: os scripts usam `--scratch-path "${TMPDIR:-/tmp}/mac-cleaner-build"` para evitar que atributos estendidos do Finder/iCloud Drive interfiram na assinatura `codesign` dentro de `.build`.
+---
 
-## Segurança e Permissões
+## Permissions Note
 
-- **Dry-run obrigatório**: nenhuma remoção acontece antes de confirmar o modal de preview com a lista exata de itens e tamanhos.
-- **Lixeira por padrão**: os arquivos são movidos para a Lixeira do macOS (`FileManager.trashItem`), permitindo recuperação. O modo "Apagar Permanentemente" exige seleção explícita e exibe alerta destacado.
-- **Proteções fixas (`SafetyGuard`)**: diretórios críticos do macOS (`/System`, `/usr`, `/bin`, `/sbin`, `~`, `~/Documents`, `~/Downloads`, `~/.ssh`, `~/Library/Keychains`) e arquivos sensíveis (`.env*`, `settings.json`, `auth.json`, `credentials*`, chaves SSH) nunca podem ser apagados.
-- **Whitelist**: qualquer pasta ou arquivo pode ser marcado como protegido pela interface (ícone de escudo ou aba **Protegidos**).
-- **Acesso Total ao Disco (Full Disk Access)**: algumas pastas protegidas em `~/Library` exigem permissão em *Ajustes do Sistema → Privacidade e Segurança → Acesso Total ao Disco*. Quando houver itens ignorados por permissão, o app avisa sem interromper o scan.
+- **Full Disk Access (Optional):** Certain sandboxed or protected locations under `~/Library` require enabling **System Settings → Privacy & Security → Full Disk Access** for MacCleaner. Any unreadable items are safely reported and skipped without interrupting the scan.
+
+---
+
+## Tech Stack
+
+| Layer | Technologies |
+| --- | --- |
+| **Language** | Swift 6.0 (`Sendable` strict concurrency) |
+| **UI & Visualization** | SwiftUI (`NavigationSplitView`, `MenuBarExtra`), Swift Charts |
+| **System & Testing** | Foundation (`FileManager.trashItem`), AppKit, Swift Testing |
+
+---
+
+## Author
+
+**Leonardo Cruz** — [GitHub](https://github.com/leonardogtcruz1)
